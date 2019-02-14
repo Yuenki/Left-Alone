@@ -18,6 +18,7 @@
 //#include <GL/glu.h>
 #include <X11/keysym.h>
 #include <GL/glx.h>
+#include "bryanG.h"
 #include "log.h"
 #include "fonts.h"
 
@@ -58,6 +59,7 @@ extern void timeCopy(struct timespec *dest, struct timespec *source);
 
 class Global {
 public:
+	GLuint bryanTexture;
 	int xres, yres;
 	char keys[65536];
 	Global() {
@@ -341,8 +343,63 @@ int main()
 	logClose();
 	return 0;
 }
+class Image {
+public:
+	int width, height;
+	unsigned char *data;
+	~Image() { delete [] data; }
+	Image(const char *fname) {
+		if (fname[0] == '\0')
+			return;
+		//printf("fname **%s**\n", fname);
+		int ppmFlag = 0;
+		char name[40];
+		strcpy(name, fname);
+		int slen = strlen(name);
+		char ppmname[80];
+		if (strncmp(name+(slen-4), ".ppm", 4) == 0)
+			ppmFlag = 1;
+		if (ppmFlag) {
+			strcpy(ppmname, name);
+		} else {
+			name[slen-4] = '\0';
+			//printf("name **%s**\n", name);
+			sprintf(ppmname,"%s.ppm", name);
+			//printf("ppmname **%s**\n", ppmname);
+			char ts[100];
+			//system("convert eball.jpg eball.ppm");
+			sprintf(ts, "convert %s %s", fname, ppmname);
+			system(ts);
+		}
+		//sprintf(ts, "%s", name);
+		FILE *fpi = fopen(ppmname, "r");
+		if (fpi) {
+			char line[200];
+			fgets(line, 200, fpi);
+			fgets(line, 200, fpi);
+			//skip comments and blank lines
+			while (line[0] == '#' || strlen(line) < 2)
+				fgets(line, 200, fpi);
+			sscanf(line, "%i %i", &width, &height);
+			fgets(line, 200, fpi);
+			//get pixel data
+			int n = width * height * 3;			
+			data = new unsigned char[n];			
+			for (int i=0; i<n; i++)
+				data[i] = fgetc(fpi);
+			fclose(fpi);
+		} else {
+			printf("ERROR opening image: %s\n",ppmname);
+			exit(0);
+		}
+		if (!ppmFlag)
+			unlink(ppmname);
+	}
+};
 
-void init_opengl(void)
+Image img[1] = {
+"./images/bigfoot.png" };
+void init_opengl()
 {
 	//OpenGL initialization
 	glViewport(0, 0, gl.xres, gl.yres);
@@ -362,6 +419,15 @@ void init_opengl(void)
 	//Do this to allow fonts
 	glEnable(GL_TEXTURE_2D);
 	initialize_fonts();
+	int w = img[0].width;
+	int h = img[0].height;
+	//
+	glBindTexture(GL_TEXTURE_2D, gl.bryanTexture);
+	//
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
+	glTexImage2D(GL_TEXTURE_2D, 0, 3, w, h, 0,
+		GL_RGB, GL_UNSIGNED_BYTE, img[0].data);
 }
 
 void normalize2d(Vec v)
@@ -876,7 +942,125 @@ void render()
 		glVertex2f(b->pos[0]+1.0f, b->pos[1]+1.0f);
 		glEnd();
 	}
+	showBryanPicture(500, 500, gl.bryanTexture);
 }
 
+;
+/*Image img[4] = {
+"./images/bigfoot.png",
+"./images/forest.png",
+"./images/forestTrans.png",
+"./images/umbrella.png" }
+
+void initOpengl(void)
+{
+	//OpenGL initialization
+	glViewport(0, 0, g.xres, g.yres);
+	//Initialize matrices
+	glMatrixMode(GL_PROJECTION); glLoadIdentity();
+	glMatrixMode(GL_MODELVIEW); glLoadIdentity();
+	//This sets 2D mode (no perspective)
+	glOrtho(0, g.xres, 0, g.yres, -1, 1);
+	//
+	glDisable(GL_LIGHTING);
+	glDisable(GL_DEPTH_TEST);
+	glDisable(GL_FOG);
+	glDisable(GL_CULL_FACE);
+	//
+	//Clear the screen
+	glClearColor(1.0, 1.0, 1.0, 1.0);
+	//glClear(GL_COLOR_BUFFER_BIT);
+	//Do this to allow fonts
+	glEnable(GL_TEXTURE_2D);
+	initialize_fonts();
+	//
+	//load the images file into a ppm structure.
+	//
+//	bigfootImage     = ppm6GetImage("./images/bigfoot.ppm");
+//	forestImage      = ppm6GetImage("./images/forest.ppm");
+//	forestTransImage = ppm6GetImage("./images/forestTrans.ppm");
+//	umbrellaImage    = ppm6GetImage("./images/umbrella.ppm");
+	//create opengl texture elements
+	glGenTextures(1, &g.bigfootTexture);
+	glGenTextures(1, &g.silhouetteTexture);
+	glGenTextures(1, &g.forestTexture);
+	glGenTextures(1, &g.umbrellaTexture);
+	//-------------------------------------------------------------------------
+	//bigfoot
+	//
+	int w = img[0].width;
+	int h = img[0].height;
+	//
+	glBindTexture(GL_TEXTURE_2D, g.bigfootTexture);
+	//
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
+	glTexImage2D(GL_TEXTURE_2D, 0, 3, w, h, 0,
+		GL_RGB, GL_UNSIGNED_BYTE, img[0].data);
+	//-------------------------------------------------------------------------
+	//
+	//silhouette
+	//this is similar to a sprite graphic
+	//
+	glBindTexture(GL_TEXTURE_2D, g.silhouetteTexture);
+	//
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
+	//
+	//must build a new set of data...
+	unsigned char *silhouetteData = buildAlphaData(&img[0]);	
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0,
+							GL_RGBA, GL_UNSIGNED_BYTE, silhouetteData);
+	free(silhouetteData);
+	//glTexImage2D(GL_TEXTURE_2D, 0, 3, w, h, 0,
+	//	GL_RGB, GL_UNSIGNED_BYTE, bigfootImage->data);
+	//-------------------------------------------------------------------------
+	//
+	//umbrella
+	//
+	glBindTexture(GL_TEXTURE_2D, g.umbrellaTexture);
+	//
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
+	//
+	//must build a new set of data...
+	silhouetteData = buildAlphaData(&img[3]);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0,
+							GL_RGBA, GL_UNSIGNED_BYTE, silhouetteData);
+	free(silhouetteData);
+	//glTexImage2D(GL_TEXTURE_2D, 0, 3, w, h, 0,
+	//	GL_RGB, GL_UNSIGNED_BYTE, bigfootImage->data);
+	//-------------------------------------------------------------------------
+	//
+	//forest
+	glBindTexture(GL_TEXTURE_2D, g.forestTexture);
+	//
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
+	glTexImage2D(GL_TEXTURE_2D, 0, 3,
+		img[1].width, img[1].height,
+		0, GL_RGB, GL_UNSIGNED_BYTE, img[1].data);
+	//-------------------------------------------------------------------------
+	//
+	//forest transparent part
+	//
+	glBindTexture(GL_TEXTURE_2D, g.forestTransTexture);
+	//
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
+	//
+	//must build a new set of data...
+	w = img[2].width;
+	h = img[2].height;
+	unsigned char *ftData = buildAlphaData(&img[2]);	
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0,
+							GL_RGBA, GL_UNSIGNED_BYTE, ftData);
+	free(ftData);
+	//glTexImage2D(GL_TEXTURE_2D, 0, 3, w, h, 0,
+	//GL_RGB, GL_UNSIGNED_BYTE, bigfootImage->data);
+	//-------------------------------------------------------------------------
+}
+
+*/
 
 
